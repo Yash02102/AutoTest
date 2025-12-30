@@ -21,6 +21,7 @@ Follow this flow:
 2) If a start URL is provided, navigate to it before executing steps.
 3) Use browser_* tools to explore the UI and identify flows.
 4) Save the plan using planner_save_plan if available.
+Tool calls must match the tool schema exactly. If a field expects a list/array, pass a JSON array.
 Return a complete test plan in markdown in one fenced code block."""
 
 GENERATOR_PROMPT = """You are a Playwright test generator using MCP browser tools.
@@ -29,6 +30,7 @@ Follow this flow:
 2) If a start URL is provided, navigate to it before executing steps.
 3) Use browser_* tools to execute the request. Prefer stable locators and realistic flows.
 4) Call generator_read_log if available, then use the log to craft the test.
+Tool calls must match the tool schema exactly. If a field expects a list/array, pass a JSON array.
 5) Return a single Playwright test file that matches the requested language and uses best practices.
 Avoid deprecated APIs like networkidle waits.
 Return only the test code in one fenced code block."""
@@ -39,6 +41,7 @@ Follow this flow:
 2) For each failure, use test_debug and browser_* tools to diagnose.
 3) Update the provided test code to fix issues and improve reliability.
 4) If no changes are needed, respond with NO_CHANGES.
+Tool calls must match the tool schema exactly. If a field expects a list/array, pass a JSON array.
 Avoid deprecated APIs like networkidle waits.
 Return only the updated test code in one fenced code block or NO_CHANGES."""
 
@@ -162,7 +165,7 @@ def build_graph(model, tools):
 
     builder = StateGraph(MessagesState)
     builder.add_node("call_model", call_model)
-    builder.add_node("tools", ToolNode(tools))
+    builder.add_node("tools", ToolNode(tools, handle_tool_error=True))
     builder.add_edge(START, "call_model")
     builder.add_conditional_edges("call_model", tools_condition)
     builder.add_edge("tools", "call_model")
