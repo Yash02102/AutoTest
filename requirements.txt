@@ -4,3 +4,5 @@ langchain-mcp-adapters
 langgraph
 streamlit
 python-dotenv
+fastapi
+uvicorn
