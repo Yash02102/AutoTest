@@ -1,0 +1,964 @@
+{
+    "name": "dsa-pricing-api",
+    "description": "API for DSA pricing",
+    "endpoints": [
+        {
+            "method": "GET",
+            "path": "/pricing",
+            "description": "Get the current pricing for DSA",
+            "parameters": [
+                {
+                    "name": "currency",
+                    "type": "string",
+                    "description": "The currency to get the price in (e.g., USD, EUR)"
+                }
+            ],
+            "response": {
+                "price": {
+                    "type": "number",
+                    "description": "The current price of DSA in the specified currency"
+                },
+                "currency": {
+                    "type": "string",
+                    "description": "The currency of the price (e.g., USD, EUR)"
+                },
+                "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "The time when the price was last updated"
+                }
+            }
+        }
+    ],
+    "downstream_dependencies": [
+        {
+            "name": "external-pricing-service",
+            "description": "Service that provides the current pricing for DSA",
+            "endpoint": {
+                "method": "GET",
+                "path": "/current-price",
+                "parameters": [
+                    {
+                        "name": "currency",
+                        "type": "string",
+                        "description": "The currency to get the price in (e.g., USD, EUR)"
+                    }
+                ],
+                "response": {
+                    "price": {
+                        "type": "number",
+                        "description": "The current price of DSA in the specified currency"
+                    },
+                    "currency": {
+                        "type": "string",
+                        "description": "The currency of the price (e.g., USD, EUR)"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "The time when the price was last updated"
+                    }
+                }
+            }
+        }
+    ]
+}
+
+{
+    "name": "dsa-pricing-ui",
+    "description": "UI for displaying DSA pricing",
+    "components": [
+        {
+            "name": "PricingDisplay",
+            "description": "Component for displaying the current price of DSA",
+            "props": [
+                {
+                    "name": "price",
+                    "type": "number",
+                    "description": "The current price of DSA"
+                },
+                {
+                    "name": "currency",
+                    "type": "string",
+                    "description": "The currency of the price (e.g., USD, EUR)"
+                },
+                {
+                    "name": "timestamp",
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "The time when the price was last updated"
+                }
+            ]
+        }
+    ],
+    "downstream_dependencies": [
+        {
+            "name": "dsa-pricing-api",
+            "description": "API for DSA pricing",
+            "endpoint": {
+                "method": "GET",
+                "path": "/pricing",
+                "parameters": [
+                    {
+                        "name": "currency",
+                        "type": "string",
+                        "description": "The currency to get the price in (e.g., USD, EUR)"
+                    }
+                ],
+                "response": {
+                    "price": {
+                        "type": "number",
+                        "description": "The current price of DSA in the specified currency"
+                    },
+                    "currency": {
+                        "type": "string",
+                        "description": "The currency of the price (e.g., USD, EUR)"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "The time when the price was last updated"
+                    }
+                }
+            }
+        }
+    ]
+}
+
+{
+    "name": "dsa-pricing-db",
+    "description": "Database for storing DSA pricing information",
+    "tables": [
+        {
+            "name": "pricing",
+            "description": "Table for storing the current pricing information for DSA",
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "integer",
+                    "description": "Primary key for the pricing record"
+                },
+                {
+                    "name": "price",
+                    "type": "number",
+                    "description": "The current price of DSA"
+                },
+                {
+                    "name": "currency",
+                    "type": "string",
+                    "description": "The currency of the price (e.g., USD, EUR)"
+                },
+                {
+                    "name": "timestamp",
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "The time when the price was last updated"
+                }
+            ]
+        }
+    ]
+}
+
+{
+    "name": "dsa-pricing-queue",
+    "description": "Queue for processing pricing updates for DSA",
+    "messages": [
+        {
+            "name": "pricing-update",
+            "description": "Message for updating the pricing information for DSA",
+            "payload": {
+                "price": {
+                    "type": "number",
+                    "description": "The new price of DSA"
+                },
+                "currency": {
+                    "type": "string",
+                    "description": "The currency of the price (e.g., USD, EUR)"
+                },
+                "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "The time when the price was updated"
+                }
+            }
+        }
+    ]
+}
+
+
+Your examples are good domain examples, but the schema shape is not standardized enough yet.
+
+Right now each JSON document is a **custom shape per entity type**:
+
+* API has `endpoints`
+* UI has `components`
+* DB has `tables`
+* Queue has `messages`
+
+That looks nice for demos, but it breaks once you want:
+
+* one generic ingestion pipeline
+* one generic Mongo collection
+* one common impact query model
+* one consistent graph builder
+
+You need a **common envelope** for every node, then type-specific payload inside it.
+
+## The right standardization model
+
+Use this pattern for every entity:
+
+```json
+{
+  "id": "string",
+  "kind": "string",
+  "name": "string",
+  "description": "string",
+  "metadata": {},
+  "interfaces": [],
+  "dependencies": [],
+  "artifacts": [],
+  "ownership": {},
+  "tags": [],
+  "createdAt": "date-time",
+  "updatedAt": "date-time"
+}
+```
+
+That means:
+
+* **common top-level structure for all entities**
+* **type-specific details go inside `interfaces`, `dependencies`, `artifacts`, `metadata`**
+* graph edges can then be derived consistently
+
+---
+
+# 1) Standardized base schema
+
+This should be the common template for all node documents.
+
+```json
+{
+  "id": "service:dsa-pricing-api",
+  "kind": "service",
+  "name": "dsa-pricing-api",
+  "description": "API for DSA pricing",
+  "metadata": {
+    "subtype": "rest-api",
+    "runtime": "dotnet",
+    "language": "csharp"
+  },
+  "interfaces": [],
+  "dependencies": [],
+  "artifacts": [],
+  "ownership": {
+    "teamId": "team:pricing",
+    "teamName": "Pricing Team"
+  },
+  "tags": ["pricing", "api"],
+  "createdAt": "2026-03-11T10:00:00Z",
+  "updatedAt": "2026-03-11T10:00:00Z"
+}
+```
+
+## Why this is better
+
+Because now:
+
+* service
+* ui
+* db
+* queue
+* module
+
+all fit one standard envelope.
+
+Then each type fills in different interface and artifact objects.
+
+---
+
+# 2) Standardized entity kinds
+
+Use a fixed enum for `kind`.
+
+## Recommended kinds
+
+```json
+[
+  "repository",
+  "service",
+  "ui",
+  "module",
+  "database",
+  "table",
+  "queue",
+  "topic",
+  "contract",
+  "component",
+  "pipeline"
+]
+```
+
+For your current examples, these are enough:
+
+* `service`
+* `ui`
+* `database`
+* `queue`
+
+---
+
+# 3) Standardized interface schema
+
+This is the key abstraction.
+
+An entity exposes one or more interfaces.
+
+## Generic interface object
+
+```json
+{
+  "id": "interface:service:dsa-pricing-api:get-pricing",
+  "kind": "http-endpoint",
+  "name": "get-pricing",
+  "description": "Get the current pricing for DSA",
+  "protocol": "http",
+  "method": "GET",
+  "path": "/pricing",
+  "input": {
+    "contractRef": "contract:get-pricing-request:v1"
+  },
+  "output": {
+    "contractRef": "contract:get-pricing-response:v1"
+  }
+}
+```
+
+This is much cleaner than embedding raw parameter/response definitions directly under endpoint forever.
+
+Because contracts should be reusable and separately versioned.
+
+---
+
+# 4) Standardized contract schema
+
+Your current `response` and `payload` objects should become first-class contract documents.
+
+## Contract template
+
+```json
+{
+  "id": "contract:get-pricing-response:v1",
+  "kind": "contract",
+  "name": "get-pricing-response",
+  "description": "Response contract for retrieving DSA pricing",
+  "metadata": {
+    "version": "v1",
+    "format": "json-schema"
+  },
+  "schema": {
+    "type": "object",
+    "properties": {
+      "price": {
+        "type": "number",
+        "description": "The current price of DSA in the specified currency"
+      },
+      "currency": {
+        "type": "string",
+        "description": "The currency of the price"
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time",
+        "description": "The time when the price was last updated"
+      }
+    },
+    "required": ["price", "currency", "timestamp"]
+  },
+  "tags": ["pricing", "response"],
+  "createdAt": "2026-03-11T10:00:00Z",
+  "updatedAt": "2026-03-11T10:00:00Z"
+}
+```
+
+This is critical because impact analysis usually happens at contract level.
+
+---
+
+# 5) Standardized dependency schema
+
+Your `downstream_dependencies` idea is correct, but it should be standardized.
+
+## Generic dependency object
+
+```json
+{
+  "targetId": "service:external-pricing-service",
+  "targetKind": "service",
+  "relationship": "calls",
+  "via": {
+    "interfaceRef": "interface:service:external-pricing-service:get-current-price",
+    "contractRefs": [
+      "contract:get-pricing-request:v1",
+      "contract:get-pricing-response:v1"
+    ]
+  },
+  "criticality": "high",
+  "isExternal": true
+}
+```
+
+This makes dependencies generic across:
+
+* service calls service
+* ui calls service
+* service writes db
+* service publishes queue
+* worker consumes topic
+
+---
+
+# 6) Standardized artifact schema
+
+Artifacts are internal structural things attached to an entity.
+
+For example:
+
+* UI components
+* DB tables
+* Queue messages
+* internal modules
+
+## Generic artifact object
+
+```json
+{
+  "id": "artifact:ui:dsa-pricing-ui:PricingDisplay",
+  "kind": "component",
+  "name": "PricingDisplay",
+  "description": "Component for displaying the current price of DSA",
+  "schema": {
+    "props": {
+      "type": "object",
+      "properties": {
+        "price": {
+          "type": "number",
+          "description": "The current price of DSA"
+        },
+        "currency": {
+          "type": "string",
+          "description": "The currency of the price"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The time when the price was last updated"
+        }
+      }
+    }
+  }
+}
+```
+
+This lets UI, DB, and queue all expose internal artifacts in a uniform way.
+
+---
+
+# 7) Standardized real-world version of your examples
+
+Now I’ll rewrite your examples in a standardized way.
+
+---
+
+## A. API Service
+
+```json
+{
+  "id": "service:dsa-pricing-api",
+  "kind": "service",
+  "name": "dsa-pricing-api",
+  "description": "API for DSA pricing",
+  "metadata": {
+    "subtype": "rest-api"
+  },
+  "interfaces": [
+    {
+      "id": "interface:service:dsa-pricing-api:get-pricing",
+      "kind": "http-endpoint",
+      "name": "get-pricing",
+      "description": "Get the current pricing for DSA",
+      "protocol": "http",
+      "method": "GET",
+      "path": "/pricing",
+      "input": {
+        "contractRef": "contract:get-pricing-request:v1"
+      },
+      "output": {
+        "contractRef": "contract:get-pricing-response:v1"
+      }
+    }
+  ],
+  "dependencies": [
+    {
+      "targetId": "service:external-pricing-service",
+      "targetKind": "service",
+      "relationship": "calls",
+      "via": {
+        "interfaceRef": "interface:service:external-pricing-service:get-current-price",
+        "contractRefs": [
+          "contract:get-pricing-request:v1",
+          "contract:get-pricing-response:v1"
+        ]
+      },
+      "criticality": "high",
+      "isExternal": true
+    }
+  ],
+  "artifacts": [],
+  "ownership": {
+    "teamId": "team:pricing"
+  },
+  "tags": ["pricing", "api"]
+}
+```
+
+---
+
+## B. UI
+
+```json
+{
+  "id": "ui:dsa-pricing-ui",
+  "kind": "ui",
+  "name": "dsa-pricing-ui",
+  "description": "UI for displaying DSA pricing",
+  "metadata": {
+    "subtype": "web-ui"
+  },
+  "interfaces": [],
+  "dependencies": [
+    {
+      "targetId": "service:dsa-pricing-api",
+      "targetKind": "service",
+      "relationship": "calls",
+      "via": {
+        "interfaceRef": "interface:service:dsa-pricing-api:get-pricing",
+        "contractRefs": [
+          "contract:get-pricing-request:v1",
+          "contract:get-pricing-response:v1"
+        ]
+      },
+      "criticality": "high",
+      "isExternal": false
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "artifact:ui:dsa-pricing-ui:PricingDisplay",
+      "kind": "component",
+      "name": "PricingDisplay",
+      "description": "Component for displaying the current price of DSA",
+      "schema": {
+        "propsContractRef": "contract:get-pricing-response:v1"
+      }
+    }
+  ],
+  "ownership": {
+    "teamId": "team:pricing-ui"
+  },
+  "tags": ["pricing", "frontend"]
+}
+```
+
+This is better because the UI artifact uses the same contract as the API response.
+Now change impact becomes easy.
+
+---
+
+## C. Database
+
+```json
+{
+  "id": "database:dsa-pricing-db",
+  "kind": "database",
+  "name": "dsa-pricing-db",
+  "description": "Database for storing DSA pricing information",
+  "metadata": {
+    "engine": "postgresql"
+  },
+  "interfaces": [],
+  "dependencies": [],
+  "artifacts": [
+    {
+      "id": "table:dsa-pricing-db:pricing",
+      "kind": "table",
+      "name": "pricing",
+      "description": "Table for storing pricing information",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Primary key"
+          },
+          "price": {
+            "type": "number",
+            "description": "The current price of DSA"
+          },
+          "currency": {
+            "type": "string",
+            "description": "The currency of the price"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The time when the price was last updated"
+          }
+        },
+        "required": ["id", "price", "currency", "timestamp"]
+      }
+    }
+  ],
+  "ownership": {
+    "teamId": "team:data-platform"
+  },
+  "tags": ["pricing", "database"]
+}
+```
+
+---
+
+## D. Queue
+
+```json
+{
+  "id": "queue:dsa-pricing-queue",
+  "kind": "queue",
+  "name": "dsa-pricing-queue",
+  "description": "Queue for processing pricing updates for DSA",
+  "metadata": {
+    "broker": "rabbitmq"
+  },
+  "interfaces": [
+    {
+      "id": "interface:queue:dsa-pricing-queue:pricing-update",
+      "kind": "message-channel",
+      "name": "pricing-update",
+      "description": "Message for updating pricing information",
+      "input": {
+        "contractRef": "contract:pricing-update-message:v1"
+      }
+    }
+  ],
+  "dependencies": [],
+  "artifacts": [],
+  "ownership": {
+    "teamId": "team:pricing"
+  },
+  "tags": ["pricing", "queue"]
+}
+```
+
+---
+
+## E. Request contract
+
+```json
+{
+  "id": "contract:get-pricing-request:v1",
+  "kind": "contract",
+  "name": "get-pricing-request",
+  "description": "Request contract for fetching pricing",
+  "metadata": {
+    "version": "v1",
+    "format": "json-schema"
+  },
+  "schema": {
+    "type": "object",
+    "properties": {
+      "currency": {
+        "type": "string",
+        "description": "Currency code like USD or EUR"
+      }
+    },
+    "required": ["currency"]
+  },
+  "tags": ["pricing", "request"]
+}
+```
+
+---
+
+## F. Response contract
+
+```json
+{
+  "id": "contract:get-pricing-response:v1",
+  "kind": "contract",
+  "name": "get-pricing-response",
+  "description": "Response contract for pricing result",
+  "metadata": {
+    "version": "v1",
+    "format": "json-schema"
+  },
+  "schema": {
+    "type": "object",
+    "properties": {
+      "price": {
+        "type": "number"
+      },
+      "currency": {
+        "type": "string"
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time"
+      }
+    },
+    "required": ["price", "currency", "timestamp"]
+  },
+  "tags": ["pricing", "response"]
+}
+```
+
+---
+
+## G. Queue message contract
+
+```json
+{
+  "id": "contract:pricing-update-message:v1",
+  "kind": "contract",
+  "name": "pricing-update-message",
+  "description": "Contract for queue message that updates pricing",
+  "metadata": {
+    "version": "v1",
+    "format": "json-schema"
+  },
+  "schema": {
+    "type": "object",
+    "properties": {
+      "price": {
+        "type": "number"
+      },
+      "currency": {
+        "type": "string"
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time"
+      }
+    },
+    "required": ["price", "currency", "timestamp"]
+  },
+  "tags": ["pricing", "event"]
+}
+```
+
+---
+
+# 8) Standardized edge model derived from these documents
+
+From the above nodes, your graph edges can be created consistently.
+
+## Example edges
+
+```json
+{
+  "fromId": "ui:dsa-pricing-ui",
+  "toId": "service:dsa-pricing-api",
+  "type": "CALLS"
+}
+```
+
+```json
+{
+  "fromId": "service:dsa-pricing-api",
+  "toId": "contract:get-pricing-response:v1",
+  "type": "OUTPUTS"
+}
+```
+
+```json
+{
+  "fromId": "service:dsa-pricing-api",
+  "toId": "service:external-pricing-service",
+  "type": "CALLS"
+}
+```
+
+```json
+{
+  "fromId": "queue:dsa-pricing-queue",
+  "toId": "contract:pricing-update-message:v1",
+  "type": "CARRIES"
+}
+```
+
+```json
+{
+  "fromId": "database:dsa-pricing-db",
+  "toId": "table:dsa-pricing-db:pricing",
+  "type": "CONTAINS"
+}
+```
+
+---
+
+# 9) The core standardization rule
+
+This is the rule you should lock in:
+
+## Entity document stores:
+
+* what this thing is
+* what interfaces it exposes
+* what dependencies it consumes
+* what artifacts it contains
+
+## Contract document stores:
+
+* the schema shape
+
+## Edge document stores:
+
+* the relationship between entities/contracts
+
+That separation is clean and scalable.
+
+---
+
+# 10) My strong recommendation
+
+Do not keep raw response schema duplicated:
+
+* in API endpoint
+* in UI props
+* in queue payload
+* in downstream dependency
+
+That duplication will kill consistency.
+
+Instead:
+
+* define contract once
+* reference it everywhere
+
+This is the real standardization.
+
+---
+
+# 11) Best schema pattern for MongoDB
+
+For MongoDB, I would use:
+
+## `kg_entities`
+
+Stores service/ui/db/queue/repository/module/etc.
+
+## `kg_contracts`
+
+Stores reusable contracts
+
+## `kg_edges`
+
+Stores graph linkage
+
+That is cleaner than cramming everything into one collection.
+
+Because contracts are central and will be heavily reused.
+
+---
+
+# 12) Final standardized template
+
+Here is the minimal standard:
+
+## Entity
+
+```json
+{
+  "id": "string",
+  "kind": "string",
+  "name": "string",
+  "description": "string",
+  "metadata": {},
+  "interfaces": [],
+  "dependencies": [],
+  "artifacts": [],
+  "ownership": {},
+  "tags": []
+}
+```
+
+## Interface
+
+```json
+{
+  "id": "string",
+  "kind": "string",
+  "name": "string",
+  "description": "string",
+  "protocol": "string",
+  "method": "string",
+  "path": "string",
+  "input": { "contractRef": "string" },
+  "output": { "contractRef": "string" }
+}
+```
+
+## Dependency
+
+```json
+{
+  "targetId": "string",
+  "targetKind": "string",
+  "relationship": "string",
+  "via": {
+    "interfaceRef": "string",
+    "contractRefs": ["string"]
+  },
+  "criticality": "string",
+  "isExternal": true
+}
+```
+
+## Artifact
+
+```json
+{
+  "id": "string",
+  "kind": "string",
+  "name": "string",
+  "description": "string",
+  "schema": {}
+}
+```
+
+## Contract
+
+```json
+{
+  "id": "string",
+  "kind": "contract",
+  "name": "string",
+  "description": "string",
+  "metadata": {
+    "version": "string",
+    "format": "json-schema"
+  },
+  "schema": {}
+}
+```
+
+---
+
+This is the right way to standardize your real-world examples.
+
+Next best step is to turn this into an actual **MongoDB JSON Schema validator** for:
+
+* `kg_entities`
+* `kg_contracts`
+* `kg_edges`
+
+That would make the design concrete.
