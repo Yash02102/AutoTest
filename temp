@@ -1,4 +1,4 @@
-{
+mom{
     "name": "dsa-pricing-api",
     "description": "API for DSA pricing",
     "endpoints": [
@@ -962,3 +962,73 @@ Next best step is to turn this into an actual **MongoDB JSON Schema validator** 
 * `kg_edges`
 
 That would make the design concrete.
+
+
+Yes — but not as one universal standard for the whole use case.
+
+What exists in enterprises today is usually a stack of standards and de facto patterns, not one complete “software knowledge graph standard” covering repos, services, contracts, queues, databases, lineage, and ownership end to end. Backstage provides a widely used software catalog model for entities and relationships; OpenAPI standardizes HTTP API contracts; AsyncAPI standardizes message-driven APIs; CloudEvents standardizes event envelopes; JSON Schema standardizes JSON validation/structure; OpenLineage standardizes data-lineage metadata; and Egeria targets broader enterprise metadata/governance. But there is no single dominant standard that unifies all of those into one canonical engineering graph. 
+
+What enterprises commonly use in practice
+
+For service and ownership catalogs, Backstage is the clearest mainstream pattern. Its Software Catalog is a centralized catalog of software entities, and its descriptor format is a standard shape for catalog entities in YAML/JSON. It also has processors for ingestion, parsing, transformation, and validation, which is very close to the workflow you want. 
+
+For synchronous service contracts, OpenAPI is the standard answer. The OpenAPI Specification defines a language-agnostic interface description for HTTP APIs so consumers and tooling can discover operations, requests, and responses. 
+
+For event-driven and messaging contracts, AsyncAPI is the closest standard. Its docs explicitly describe the AsyncAPI document as a communication contract between senders and receivers, and the specification is protocol-agnostic across Kafka, AMQP, MQTT, WebSockets, and more. 
+
+For event envelope interoperability, CloudEvents is relevant. It standardizes how event data is described and exchanged, which is useful when you want a common outer event model even if payload schemas vary by domain. 
+
+For schema validation and machine-readable document constraints, JSON Schema is the standard building block. It is specifically meant for consistency, validity, and interoperability of JSON documents. 
+
+For data lineage and impact analysis in the data plane, OpenLineage is a real standard, but it is focused on jobs, runs, and datasets rather than full software architecture graphs. It is useful if your graph needs data-job lineage, not as a full replacement for service/repo/entity modeling. 
+
+For enterprise metadata/governance federation, Egeria is the closest thing to a broader open metadata framework. It is much heavier and more governance-oriented than most engineering teams want, but it proves that open enterprise metadata standards do exist in adjacent spaces. 
+
+The honest conclusion
+
+So the answer is:
+
+Yes, there are standards for important slices of this problem.
+
+No, there is not a single broadly adopted enterprise standard for the exact end-to-end engineering knowledge graph you described. 
+
+
+What I would standardize around
+
+If you want something realistic and enterprise-friendly, I would not invent everything from scratch. I would compose your model like this:
+
+Entity catalog / ownership / relations: Backstage-style entity descriptors as the governance baseline. 
+
+HTTP interfaces: OpenAPI. 
+
+Async interfaces: AsyncAPI. 
+
+Event envelope normalization: CloudEvents where applicable. 
+
+Schema validation for your own entity/edge docs: JSON Schema. 
+
+Data lineage subgraph: OpenLineage if you need jobs/datasets/runs. 
+
+
+That combination is far more credible than saying “we created our own standard.”
+
+Strong recommendation
+
+Use Backstage as the catalog/process model, then extend it with your own graph layer. That is the closest thing to an enterprise-standard foundation for software entities, ownership, and ingestion. Then ingest OpenAPI and AsyncAPI into your graph instead of asking teams to manually duplicate those contracts. 
+
+Your custom part should be only:
+
+canonical IDs
+
+edge taxonomy
+
+resolution workflow
+
+review/governance states
+
+graph persistence/query layer
+
+
+Everything else should lean on existing standards.
+
+The next smart step is to map your proposed kg/entity.json, kg/contracts/*.json, and kg_edges model against Backstage entity descriptors plus OpenAPI/AsyncAPI.
